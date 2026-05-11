@@ -145,17 +145,17 @@ export class AudioHandler {
 			);
 
 			const originalText: string = response.data.text;
+
+			if (!originalText || originalText.trim().length < 2) {
+				new Notice("No speech detected");
+				return;
+			}
+
 			let finalText = originalText;
 
 			// Post-process with LLM if enabled
 			if (this.plugin.settings.postProcessing) {
 				const ppApiKey = this.getPostProcessingApiKey();
-				if (!ppApiKey) {
-					new Notice(
-						"✘ Add your post-processing API key in settings"
-					);
-					return;
-				}
 				try {
 					if (this.plugin.settings.debugMode) {
 						new Notice("Post-processing...");
@@ -252,22 +252,6 @@ export class AudioHandler {
 					resolvedNoteFilePath,
 					noteContent
 				);
-			}
-
-			// Paste at cursor if there's an active editor
-			const editor =
-				this.plugin.app.workspace.getActiveViewOfType(
-					MarkdownView
-				)?.editor;
-			if (editor) {
-				const cursorPosition = editor.getCursor();
-				editor.replaceRange(outputText, cursorPosition);
-
-				const newPosition = {
-					line: cursorPosition.line,
-					ch: cursorPosition.ch + outputText.length,
-				};
-				editor.setCursor(newPosition);
 			}
 
 			new Notice("Transcription complete");

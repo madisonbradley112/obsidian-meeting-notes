@@ -23,16 +23,9 @@ export class WhisperSettingsTab extends PluginSettingTab {
 
 		containerEl.empty();
 
-		// --- API Keys ---
-		new Setting(containerEl).setName("API Keys").setHeading();
-		this.createWhisperApiKeySetting();
-		this.createOpenAiApiKeySetting();
-		this.createAnthropicApiKeySetting();
-
 		// --- Transcription ---
 		new Setting(containerEl).setName("Transcription").setHeading();
 		this.createApiUrlSetting();
-		this.createModelSetting();
 		this.createLanguageSetting();
 		this.createPromptSetting();
 		this.createSendCursorContextSetting();
@@ -63,7 +56,6 @@ export class WhisperSettingsTab extends PluginSettingTab {
 		if (this.plugin.settings.postProcessing) {
 			this.createPostProcessingProviderSetting();
 			this.createPostProcessingUrlSetting();
-			this.createPostProcessingApiKeySetting();
 			this.createPostProcessingModelSetting();
 			this.createPostProcessingPromptSetting();
 			this.createAutoGenerateTitleSetting();
@@ -592,6 +584,7 @@ export class WhisperSettingsTab extends PluginSettingTab {
 					});
 			});
 	}
+
 
 	private createDebugModeToggleSetting(): void {
 		new Setting(this.containerEl)

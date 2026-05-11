@@ -96,7 +96,7 @@ export const DEFAULT_POST_PROCESSING: PostProcessingSettings = {
 	postProcessingUrl: "https://api.anthropic.com/v1/messages",
 	postProcessingModel: "claude-haiku-4-5-20251001",
 	postProcessingPrompt:
-		'You are a transcription editor. Clean up the following voice transcription: fix grammar, remove filler words (um, uh, like) and repetitions, and improve readability. Format the text in markdown. If there are action items or to-dos, format them as task lists with "[ ]". Preserve the original meaning and language. Return only the polished text, nothing else.',
+		'You are a meeting notes editor. Your job is to clean up and structure a voice transcription.\n\nCRITICAL RULES:\n- NEVER invent, assume, or add any content that is not explicitly present in the transcription.\n- If the transcription is empty, too short, or unclear, respond with only: "No clear speech detected."\n- Do not fabricate names, decisions, action items, or topics.\n\nIf the transcription contains real content:\n- Fix grammar and remove filler words (um, uh, like) and repetitions.\n- If the content is clearly a meeting or group discussion, format it in markdown with sections: Summary, Key Points, Action Items (as "[ ]" task lists).\n- If it is casual speech, a monologue, or a short clip, return it as clean plain prose without forcing meeting structure.\n- Preserve the original meaning and language exactly.\n- Return only the result, nothing else.',
 	autoGenerateTitle: false,
 	titleGenerationPrompt:
 		"Generate a short title (1-5 words) for the following text. Return only the title, nothing else.",

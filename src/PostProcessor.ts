@@ -1,4 +1,4 @@
-import axios from "axios";
+import { requestUrl } from "obsidian";
 import { PostProcessingProvider } from "./SettingsManager";
 
 export interface PostProcessorConfig {
@@ -23,43 +23,40 @@ export class PostProcessor {
 	}
 
 	private async callOpenAI(text: string, prompt: string): Promise<string> {
-		const response = await axios.post(
-			this.config.url,
-			{
+		const headers: Record<string, string> = { "Content-Type": "application/json" };
+		if (this.config.apiKey) headers["Authorization"] = `Bearer ${this.config.apiKey}`;
+
+		const response = await requestUrl({
+			url: this.config.url,
+			method: "POST",
+			headers,
+			body: JSON.stringify({
 				model: this.config.model,
 				messages: [
-					{ role: "system", content: prompt },
-					{ role: "user", content: text },
+					{ role: "system", content: prompt ?? "" },
+					{ role: "user", content: text ?? "" },
 				],
-			},
-			{
-				headers: {
-					Authorization: `Bearer ${this.config.apiKey}`,
-					"Content-Type": "application/json",
-				},
-			}
-		);
-		return response.data.choices[0].message.content.trim();
+			}),
+		});
+		return response.json.choices[0].message.content.trim();
 	}
 
 	private async callAnthropic(text: string, prompt: string): Promise<string> {
-		const response = await axios.post(
-			this.config.url,
-			{
+		const response = await requestUrl({
+			url: this.config.url,
+			method: "POST",
+			headers: {
+				"x-api-key": this.config.apiKey,
+				"anthropic-version": "2023-06-01",
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({
 				model: this.config.model,
 				max_tokens: 8192,
 				system: prompt,
 				messages: [{ role: "user", content: text }],
-			},
-			{
-				headers: {
-					"x-api-key": this.config.apiKey,
-					"anthropic-version": "2023-06-01",
-					"anthropic-dangerous-direct-browser-access": "true",
-					"Content-Type": "application/json",
-				},
-			}
-		);
-		return response.data.content[0].text;
+			}),
+		});
+		return response.json.content[0].text;
 	}
 }

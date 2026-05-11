@@ -1,4 +1,5 @@
 import { Notice, Plugin, TFile } from "obsidian";
+import { join } from "path";
 import { Timer } from "src/Timer";
 import { Controls } from "src/Controls";
 import { AudioHandler } from "src/AudioHandler";
@@ -6,6 +7,7 @@ import { WhisperSettingsTab } from "src/WhisperSettingsTab";
 import { SettingsManager, PluginSettings } from "src/SettingsManager";
 import { NativeAudioRecorder } from "src/AudioRecorder";
 import { RecordingStatus, StatusBar } from "src/StatusBar";
+import { ServerManager } from "src/ServerManager";
 import { getExtensionFromMimeType } from "src/utils";
 export default class Whisper extends Plugin {
 	settings: PluginSettings;
@@ -15,10 +17,19 @@ export default class Whisper extends Plugin {
 	audioHandler: AudioHandler;
 	controls: Controls | null = null;
 	statusBar: StatusBar;
+	serverManager: ServerManager;
 
 	async onload() {
 		this.settingsManager = new SettingsManager(this);
 		this.settings = await this.settingsManager.loadSettings();
+
+		const adapter = this.app.vault.adapter as any;
+		const vaultPath = adapter.getBasePath();
+		const pluginDir = this.manifest.dir
+			? join(vaultPath, this.manifest.dir)
+			: join(vaultPath, ".obsidian", "plugins", this.manifest.id);
+		const serverDir = join(pluginDir, "whisper-api-server");
+		this.serverManager = new ServerManager(serverDir);
 
 		this.addRibbonIcon("mic", "Open recording controls", () => {
 			this.openControls();
@@ -91,6 +102,7 @@ export default class Whisper extends Plugin {
 	}
 
 	onunload() {
+		this.serverManager?.stopWhisper();
 		if (this.controls) {
 			this.controls.close();
 		}
@@ -107,11 +119,14 @@ export default class Whisper extends Plugin {
 			new Notice("Already recording");
 			return;
 		}
+		// Start server in background so the model loads while recording
+		this.serverManager.startWhisper();
 		try {
 			await this.recorder.startRecording();
 			this.statusBar.updateStatus(RecordingStatus.Recording);
 			new Notice("Recording...");
 		} catch (err) {
+			this.serverManager.stopWhisper();
 			this.statusBar.updateStatus(RecordingStatus.Idle);
 			new Notice("✘ Could not start recording");
 		}
@@ -130,8 +145,23 @@ export default class Whisper extends Plugin {
 		const fileName = `${new Date()
 			.toISOString()
 			.replace(/[:.]/g, "-")}.${extension}`;
-		await this.audioHandler.sendAudioData(audioBlob, fileName);
-		this.statusBar.updateStatus(RecordingStatus.Idle);
+
+		const healthUrl = this.whisperHealthUrl();
+		new Notice("Waiting for Whisper server...");
+		const ready = await this.serverManager.waitUntilReady(healthUrl);
+		if (!ready) {
+			new Notice("✘ Whisper server did not start in time");
+			this.serverManager.stopWhisper();
+			this.statusBar.updateStatus(RecordingStatus.Idle);
+			return;
+		}
+
+		try {
+			await this.audioHandler.sendAudioData(audioBlob, fileName);
+		} finally {
+			this.serverManager.stopWhisper();
+			this.statusBar.updateStatus(RecordingStatus.Idle);
+		}
 	}
 
 	async pauseRecording() {
@@ -154,6 +184,7 @@ export default class Whisper extends Plugin {
 			return;
 		}
 		await this.recorder.stopRecording();
+		this.serverManager.stopWhisper();
 		this.statusBar.updateStatus(RecordingStatus.Idle);
 		new Notice("Recording cancelled");
 	}
@@ -163,6 +194,18 @@ export default class Whisper extends Plugin {
 			this.controls = new Controls(this);
 		}
 		this.controls.open();
+	}
+
+	// Derives the health-check URL from the configured transcription API URL.
+	private whisperHealthUrl(): string {
+		try {
+			const u = new URL(this.settings.apiUrl);
+			u.pathname = "/health";
+			u.search = "";
+			return u.toString();
+		} catch {
+			return "http://localhost:5042/health";
+		}
 	}
 
 	// --- Commands ---
@@ -197,10 +240,23 @@ export default class Whisper extends Plugin {
 					if (files && files.length > 0) {
 						const file = files[0];
 						const audioBlob = file.slice(0, file.size, file.type);
-						await this.audioHandler.sendAudioData(
-							audioBlob,
-							file.name
+						this.serverManager.startWhisper();
+						const ready = await this.serverManager.waitUntilReady(
+							this.whisperHealthUrl()
 						);
+						if (!ready) {
+							new Notice("✘ Whisper server did not start in time");
+							this.serverManager.stopWhisper();
+							return;
+						}
+						try {
+							await this.audioHandler.sendAudioData(
+								audioBlob,
+								file.name
+							);
+						} finally {
+							this.serverManager.stopWhisper();
+						}
 					}
 				};
 				fileInput.click();
